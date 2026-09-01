@@ -1,7 +1,7 @@
 /*********************************************************************
  * Software License Agreement (BSD License)
  *
- *  Copyright (c) 2021, Robert Haschke
+ *  Copyright (c) 2021, Bielefeld University
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -36,6 +36,7 @@
 
 #pragma once
 
+#include <string>
 #include <pybind11/pybind11.h>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/serialization.hpp>
@@ -82,6 +83,36 @@ struct type_caster<rclcpp::Duration>
   PYBIND11_TYPE_CASTER(rclcpp::Duration, _("Duration"));
 };
 
+/// Convert rclcpp::Time to/from rclpy::Time
+template <>
+struct type_caster<rclcpp::Time>
+{
+  // convert from rclpy::Time to rclcpp::Time
+  bool load(handle src, bool /* convert */)
+  {
+    // Extract values for constructing the rclcpp::Time object
+    int64_t nanoseconds = src.attr("nanoseconds").cast<int64_t>();
+    int clock_type = src.attr("clock_type").cast<int>();
+
+    // Construct the rclcpp::Time object
+    value = rclcpp::Time(nanoseconds, static_cast<rcl_clock_type_t>(clock_type));
+    return true;
+  }
+
+  // convert from rclcpp::Time to rclpy::Time
+  static handle cast(const rclcpp::Time& src, return_value_policy /* policy */, handle /* parent */)
+  {
+    object Time = module_::import("rclpy.time").attr("Time");
+    object ClockType = Time().attr("clock_type").attr("__class__");
+
+    return Time(arg("nanoseconds") = src.nanoseconds(),
+                arg("clock_type") = ClockType(static_cast<int>(src.get_clock_type())))
+        .release();  // release the ownership of the object
+  }
+
+  PYBIND11_TYPE_CASTER(rclcpp::Time, _("Time"));
+};
+
 /// Base class for type conversion (C++ <-> python) of ROS message types
 template <typename T>
 struct RosMsgTypeCaster
@@ -100,7 +131,7 @@ struct RosMsgTypeCaster
     object cls = py_binding_tools::createMessageClass(rosidl_generator_traits::name<T>());
 
     // deserialize into python object
-    module rclpy = module::import("rclpy.serialization");
+    module_ rclpy = module_::import("rclpy.serialization");
     object msg = rclpy.attr("deserialize_message")(buf, cls);
 
     return msg.release();
@@ -114,7 +145,7 @@ struct RosMsgTypeCaster
       return false;
 
     // serialize src into python buffer
-    module rclpy = module::import("rclpy.serialization");
+    module_ rclpy = module_::import("rclpy.serialization");
     bytes buf = rclpy.attr("serialize_message")(src);
 
     // deserialize into C++ object
@@ -136,7 +167,17 @@ struct RosMsgTypeCaster
 };
 
 template <typename T>
-struct type_caster<T, enable_if_t<rosidl_generator_traits::is_message<T>::value>> : RosMsgTypeCaster<T>
+struct type_caster<
+    T, enable_if_t<
+           // clang-format off
+           rosidl_generator_traits::is_message<T>::value ||
+           rosidl_generator_traits::is_service_request<T>::value ||
+           rosidl_generator_traits::is_service_response<T>::value ||
+           rosidl_generator_traits::is_action_goal<T>::value ||
+           rosidl_generator_traits::is_action_result<T>::value ||
+           rosidl_generator_traits::is_action_feedback<T>::value
+           // clang-format on
+           >> : RosMsgTypeCaster<T>
 {
 };
 
