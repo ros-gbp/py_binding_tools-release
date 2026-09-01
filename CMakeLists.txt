@@ -1,13 +1,11 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.12)
 project(py_binding_tools)
 
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
-find_package(pybind11_vendor REQUIRED)
-find_package(pybind11 REQUIRED)
+include(ConfigExtras.cmake)
 
 add_library(${PROJECT_NAME} SHARED
   src/ros_msg_typecasters.cpp
@@ -17,7 +15,7 @@ target_include_directories(${PROJECT_NAME}
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
-ament_target_dependencies(${PROJECT_NAME} rclcpp geometry_msgs pybind11)
+target_link_libraries(${PROJECT_NAME} PUBLIC rclcpp::rclcpp ${geometry_msgs_TARGETS} pybind11::module)
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
 
@@ -53,4 +51,4 @@ endif()
 
 ament_export_dependencies(rclcpp)
 ament_export_dependencies(geometry_msgs)
-ament_package()
+ament_package(CONFIG_EXTRAS ConfigExtras.cmake)
